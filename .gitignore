@@ -1,0 +1,22 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Rider / JetBrains / IntelliJ
+.idea/
+
+# Build artifacts
+bin/
+obj/
+
+# Configuration
+appsettings.json
+appsettings.Development.json
+
+# Others
+*.log
+*.vsidx
+*.db
+*.db-shm
+*.db-wal

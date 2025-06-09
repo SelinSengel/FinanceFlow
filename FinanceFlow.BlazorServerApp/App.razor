@@ -1,0 +1,44 @@
+﻿@using FinanceFlow.BlazorServerApp.Components.Layout
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
+@* Login sayfasına yönlendirme için özel bir component kullanacaksanız, onun using'ini de ekleyebilirsiniz: *@
+@* @using FinanceFlow.BlazorServerApp.Components (Eğer RedirectToLogin gibi bir component oluşturursanız) *@
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                <NotAuthorized>
+                    @if (context.User.Identity?.IsAuthenticated != true)
+                    {
+                        @* Kullanıcı giriş yapmamışsa ve yetkili değilse burası görüntülenir. *@
+                        
+                        @* Seçenek 1: Basit bir mesaj ve login sayfasına link *@
+                        <p>Bu içeriği görüntülemek için giriş yapmanız gerekiyor.</p>
+                        <p><a href="/giris/bireysel">Giriş yapmak için tıklayın.</a></p> 
+                        @* Yukarıdaki "/giris/bireysel" yolunu kendi login sayfanızın yoluyla değiştirin. *@
+
+                        @* Seçenek 2: Otomatik yönlendirme için özel bir component (önerilir) *@
+                        @* <RedirectToLogin Target="/giris/bireysel" /> *@
+                    }
+                    else
+                    {
+                        @* Kullanıcı giriş yapmış ama sayfaya yetkisi yoksa burası görüntülenir. *@
+                        <p role="alert">Bu sayfayı görüntüleme yetkiniz yok.</p>
+                    }
+                </NotAuthorized>
+                <Authorizing>
+                    @* Yetkilendirme kontrol edilirken gösterilecek içerik *@
+                    <p role="status">Yetkilendirme kontrol ediliyor...</p>
+                </Authorizing>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <PageTitle>Sayfa Bulunamadı</PageTitle>
+            <LayoutView Layout="@typeof(MainLayout)">
+                <p role="alert">Üzgünüz, bu adreste bir şey yok.</p>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

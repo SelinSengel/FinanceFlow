@@ -1,0 +1,103 @@
+@page "/giris/bireysel"
+@using System.ComponentModel.DataAnnotations
+@using FinanceFlow.Shared.Models
+@using FinanceFlow.BlazorServerApp.Components.Layout
+@using FinanceFlow.BlazorServerApp.Services
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@inject AuthApiService AuthService
+@inject NavigationManager Nav
+
+<div class="login-page individual">
+    <div class="login-card">
+        <h2>Hoş Geldin!</h2>
+        <p class="subtitle" style="color: #495057;">
+            Harcamalarını takip et, ilham al ve daha akıllı kararlar ver.
+        </p>
+
+        <EditForm Model="loginModel"
+                  OnValidSubmit="HandleLogin"
+                  OnInvalidSubmit="HandleInvalid">
+            <DataAnnotationsValidator />
+
+            <div class="form-group mb-3">
+                <label>E-posta</label>
+                <InputText @bind-Value="loginModel.Email"
+                           placeholder="E-posta adresinizi girin"
+                           class="form-control" />
+                <ValidationMessage For="@(() => loginModel.Email)" />
+            </div>
+
+            <div class="form-group mb-4">
+                <label>Şifre</label>
+                <div class="input-group">
+                    <InputText class="form-control"
+                               @bind-Value="loginModel.Password"
+                               type="@_passwordInputType"
+                               placeholder="Şifrenizi girin" />
+                    <button class="btn btn-outline-secondary"
+                            type="button"
+                            @onclick="TogglePasswordVisibility"
+                            aria-label="Toggle password visibility">
+                        <i class="@_passwordIcon"></i>
+                    </button>
+                </div>
+                <ValidationMessage For="@(() => loginModel.Password)" />
+            </div>
+
+            <div class="text-right mb-3">
+                <a href="#"
+                   @onclick="NavigateToForgotPassword"
+                @onclick:preventDefault
+                   class="text-sm text-primary">
+                    Şifreni mi unuttun?
+                </a>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+                Giriş Yap
+            </button>
+        </EditForm>
+
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger mt-3">@ErrorMessage</div>
+        }
+
+        <p class="cta mt-4 text-center">
+            Henüz kaydolmadın mı?
+            <a href="/kayit/bireysel">Ücretsiz kayıt ol</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    private LoginModel loginModel = new();
+    private string ErrorMessage;
+
+    private bool _showPassword;
+    private string _passwordInputType => _showPassword ? "text" : "password";
+    private string _passwordIcon => _showPassword ? "fas fa-eye-slash" : "fas fa-eye";
+
+    private void TogglePasswordVisibility()
+        => _showPassword = !_showPassword;
+
+    private void NavigateToForgotPassword() =>
+        Nav.NavigateTo("/forgot-password/bireysel");
+
+    private Task HandleInvalid(EditContext ctx)
+    {
+        ErrorMessage = "Lütfen tüm alanları eksiksiz ve geçerli doldurun.";
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleLogin()
+    {
+        ErrorMessage = null;
+        var result = await AuthService.LoginIndividualAsync(loginModel);
+        if (result.Succeeded)
+            Nav.NavigateTo("/Anasayfa", true);
+        else
+            ErrorMessage = result.Message;
+    }
+}

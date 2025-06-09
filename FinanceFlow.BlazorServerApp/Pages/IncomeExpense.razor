@@ -1,0 +1,226 @@
+@page "/GelirGider"
+@using System.Globalization
+@using FinanceFlow.Shared.Models
+@inject HttpClient Http
+@inject IJSRuntime JS
+@using System.Net.Http.Json
+
+<style>
+    .rounded-card {
+        background-color: #ffffff;
+        border: 1px solid #dee2e6;
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .form-label {
+        font-weight: 500;
+    }
+
+    .form-text {
+        font-size: 0.85rem;
+    }
+
+    ::placeholder {
+        color: #aaa;
+    }
+</style>
+
+<div class="container-lg py-4">
+    <h3 class="mb-4">Gelir ve Gider Ekle</h3>
+    <div class="row gx-4 gy-4">
+
+        <!-- Gider Ekle -->
+        <div class="col-12 col-md-6">
+            <div class="rounded-card">
+                <h5 class="mb-3">💸 Gider Ekle</h5>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label">Kategori</label>
+                        <select class="form-select" @bind="expenseCategory">
+                            <option value="">Seçiniz</option>
+                            <option>Market</option>
+                            <option>Ulaşım</option>
+                            <option>Fatura</option>
+                            <option>Kafe</option>
+                            <option>Diğer</option>
+                        </select>
+                        @if (expenseCategory == "Diğer")
+                        {
+                            <input class="form-control mt-2" placeholder="Kategori Adı" @bind="expenseCustomCategory" />
+                        }
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Tutar</label>
+                        <input type="number" class="form-control" @bind-value="newExpense.Amount" @bind-value:event="oninput" step="1" />
+                        @if (newExpense.Amount > 0)
+                        {
+                            <div class="form-text text-success">
+                                Girdiğiniz tutar: <strong>@newExpense.Amount.ToString("N0", trTR) TL</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <small class="text-primary fw-bold">(Toplulukta paylaşım için açıklama girmeniz zorunludur)</small>
+                    <textarea class="form-control mt-2" @bind="newExpense.Comment" rows="4" style="resize: vertical;" placeholder="Detaylı bilgi giriniz."></textarea>
+                </div>
+                <div class="form-check form-switch mt-3">
+                    <input class="form-check-input" type="checkbox" id="anonExpense" @bind="newExpense.IsAnonymous" />
+                    <label class="form-check-label" for="anonExpense">Anonim Paylaş</label>
+                </div>
+                <div class="mt-4 d-flex justify-content-end">
+                    <button class="btn btn-outline-secondary me-2" @onclick="() => SubmitExpenseAsync(false)" disabled="@isSubmittingExpense">
+                        Kaydet
+                    </button>
+                    <button class="btn btn-primary" @onclick="() => SubmitExpenseAsync(true)" disabled="@isSubmittingExpense">
+                        Paylaş
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gelir Ekle -->
+        <div class="col-12 col-md-6">
+            <div class="rounded-card">
+                <h5 class="mb-3">💰 Gelir Ekle</h5>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label">Kategori</label>
+                        <select class="form-select" @bind="incomeCategory">
+                            <option value="">Seçiniz</option>
+                            <option>Maaş</option>
+                            <option>Bonus</option>
+                            <option>Yatırım Geliri</option>
+                            <option>Diğer</option>
+                        </select>
+                        @if (incomeCategory == "Diğer")
+                        {
+                            <input class="form-control mt-2" placeholder="Kategori Adı" @bind="incomeCustomCategory" />
+                        }
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Tutar</label>
+                        <input type="number" class="form-control" @bind-value="newIncome.Amount" @bind-value:event="oninput" step="1" />
+                        @if (newIncome.Amount > 0)
+                        {
+                            <div class="form-text text-success">
+                                Girdiğiniz tutar: <strong>@newIncome.Amount.ToString("N0", trTR) TL</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <small class="text-primary fw-bold">(Toplulukta paylaşım için açıklama girmeniz zorunludur)</small>
+                    <textarea class="form-control mt-2" @bind="newIncome.Comment" rows="4" style="resize: vertical;" placeholder="Detaylı bilgi giriniz."></textarea>
+                </div>
+                <div class="form-check form-switch mt-3">
+                    <input class="form-check-input" type="checkbox" id="anonIncome" @bind="newIncome.IsAnonymous" />
+                    <label class="form-check-label" for="anonIncome">Anonim Paylaş</label>
+                </div>
+                <div class="mt-4 d-flex justify-content-end">
+                    <button class="btn btn-outline-secondary me-2" @onclick="() => SubmitIncomeAsync(false)" disabled="@isSubmittingIncome">
+                        Kaydet
+                    </button>
+                    <button class="btn btn-primary" @onclick="() => SubmitIncomeAsync(true)" disabled="@isSubmittingIncome">
+                        Paylaş
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private static readonly CultureInfo trTR = new("tr-TR");
+
+    private ExpenseModel newExpense = new() { Type = "Expense", CreatedAt = DateTime.Now };
+    private string expenseCategory = "";
+    private string expenseCustomCategory = "";
+    private bool isSubmittingExpense;
+
+    private ExpenseModel newIncome = new() { Type = "Income", CreatedAt = DateTime.Now };
+    private string incomeCategory = "";
+    private string incomeCustomCategory = "";
+    private bool isSubmittingIncome;
+
+    private async Task SubmitExpenseAsync(bool sharePublicly)
+    {
+        if (isSubmittingExpense) return;
+        isSubmittingExpense = true;
+
+        var finalCat = expenseCategory == "Diğer" ? expenseCustomCategory : expenseCategory;
+        if (string.IsNullOrWhiteSpace(finalCat) || newExpense.Amount <= 0)
+        {
+            isSubmittingExpense = false;
+            return;
+        }
+
+        newExpense.Category = finalCat;
+        newExpense.CreatedAt = DateTime.Now;
+        newExpense.IsShared = sharePublicly;
+
+        if (sharePublicly)
+        {
+            if (string.IsNullOrWhiteSpace(newExpense.Comment))
+            {
+                await JS.InvokeVoidAsync("alert", "Toplulukta paylaşmak için açıklama girmeniz zorunludur.");
+                isSubmittingExpense = false;
+                return;
+            }
+        }
+        else
+        {
+            newExpense.Comment = "";
+            newExpense.IsAnonymous = false;
+        }
+
+        await Http.PostAsJsonAsync("api/expenses/expense", newExpense);
+
+        newExpense = new ExpenseModel { Type = "Expense", CreatedAt = DateTime.Now };
+        expenseCategory = "";
+        expenseCustomCategory = "";
+        isSubmittingExpense = false;
+    }
+
+    private async Task SubmitIncomeAsync(bool sharePublicly)
+    {
+        if (isSubmittingIncome) return;
+        isSubmittingIncome = true;
+
+        var finalCat = incomeCategory == "Diğer" ? incomeCustomCategory : incomeCategory;
+        if (string.IsNullOrWhiteSpace(finalCat) || newIncome.Amount <= 0)
+        {
+            isSubmittingIncome = false;
+            return;
+        }
+
+        newIncome.Category = finalCat;
+        newIncome.CreatedAt = DateTime.Now;
+        newExpense.IsShared = sharePublicly;
+
+        if (sharePublicly)
+        {
+            if (string.IsNullOrWhiteSpace(newIncome.Comment))
+            {
+                await JS.InvokeVoidAsync("alert", "Toplulukta paylaşmak için açıklama girmeniz zorunludur.");
+                isSubmittingIncome = false;
+                return;
+            }
+        }
+        else
+        {
+            newIncome.Comment = "";
+            newIncome.IsAnonymous = false;
+        }
+
+        await Http.PostAsJsonAsync("api/expenses/income", newIncome);
+
+        newIncome = new ExpenseModel { Type = "Income", CreatedAt = DateTime.Now };
+        incomeCategory = "";
+        incomeCustomCategory = "";
+        isSubmittingIncome = false;
+    }
+}

@@ -1,0 +1,221 @@
+@page "/Profil"
+@using System.Globalization
+@using System.ComponentModel.DataAnnotations
+@using FinanceFlow.Shared.Models
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Text.Json
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+
+<div class="container-lg py-4">
+    <h3 class="mb-4">👤 Profil</h3>
+    <div class="row gx-4 gy-4">
+
+        <!-- Kullanıcı Bilgileri Kartı -->
+        <div class="col-12 col-md-6">
+            <div class="card p-3 text-center">
+                <InputFile id="avatarInput"
+                           style="display:none"
+                           OnChange="OnAvatarSelected"
+                           accept="image/*" />
+                <label for="avatarInput" style="cursor:pointer;">
+                    <img src="@avatarUrl"
+                         onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=@Uri.EscapeDataString(fullName)&background=0D8ABC&color=fff'"
+                         class="rounded-circle mb-3"
+                         style="width:100px;height:100px;object-fit:cover;" />
+                </label>
+
+                @if (!isEditing)
+                {
+                    <h5>@fullName</h5>
+                    <p class="text-muted mb-1">@email</p>
+                    <button class="btn btn-outline-primary btn-sm mt-2"
+                            @onclick="EditProfile">
+                        Profili Düzenle
+                    </button>
+                }
+                else
+                {
+                    <EditForm Model="editModel" OnSubmit="SaveProfileAsync">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <div class="mb-3">
+                            <label class="form-label">Kullanıcı Adı</label>
+                            <InputText class="form-control" @bind-Value="editModel.Username" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">İsim Soyisim</label>
+                            <InputText class="form-control" @bind-Value="editModel.FullName" />
+                        </div>
+
+                        <div class="d-flex justify-content-center">
+                            <button type="submit" class="btn btn-primary me-2">Kaydet</button>
+                            <button type="button" class="btn btn-secondary" @onclick="CancelEdit">İptal</button>
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(updateMessage))
+                        {
+                            <div class="alert alert-warning mt-3">@updateMessage</div>
+                        }
+                    </EditForm>
+                }
+            </div>
+        </div>
+
+        <!-- Hesap Özeti -->
+        <div class="col-12 col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">📝 Hesap Özeti</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-6">Toplam Gelir</dt>
+                        <dd class="col-6">@TotalIncome.ToString("C0", trTR)</dd>
+                        <dt class="col-6">Toplam Gider</dt>
+                        <dd class="col-6">@TotalExpenses.ToString("C0", trTR)</dd>
+                        <dt class="col-6">İşlem Sayısı</dt>
+                        <dd class="col-6">@TotalTransactions</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly CultureInfo trTR = new("tr-TR");
+
+    private string fullName = "";
+    private string username = "";
+    private string email = "";
+    private string avatarUrl = "";
+    private decimal TotalIncome;
+    private decimal TotalExpenses;
+    private int TotalTransactions;
+
+    private bool isEditing = false;
+    private string updateMessage = "";
+    private IBrowserFile? selectedAvatar;
+
+    class EditProfileModel
+    {
+        [Required(ErrorMessage = "Kullanıcı adı zorunludur")]
+        public string Username { get; set; } = "";
+
+        [Required(ErrorMessage = "İsim soyisim zorunludur")]
+        public string FullName { get; set; } = "";
+    }
+
+    private EditProfileModel editModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var me = await Http.GetFromJsonAsync<UserModel>("api/UserData/me");
+            if (me is not null)
+            {
+                fullName = me.FullName;
+                username = me.Username;
+                email = me.Email;
+                avatarUrl = me.AvatarUrl ?? "";
+            }
+
+            var all = await Http.GetFromJsonAsync<List<ExpenseModel>>("api/expenses") ?? new();
+            TotalIncome = all.Where(e => e.Type == "Income").Sum(e => e.Amount);
+            TotalExpenses = all.Where(e => e.Type == "Expense").Sum(e => e.Amount);
+            TotalTransactions = all.Count;
+        }
+        catch (Exception ex)
+        {
+            updateMessage = "Veri alınamadı: " + ex.Message;
+        }
+    }
+
+    void EditProfile()
+    {
+        isEditing = true;
+        editModel.Username = username;
+        editModel.FullName = fullName;
+        updateMessage = "";
+    }
+
+    void CancelEdit()
+    {
+        isEditing = false;
+        selectedAvatar = null;
+        updateMessage = "";
+    }
+
+    async Task SaveProfileAsync()
+    {
+        var token = await JS.InvokeAsync<string>("localStorage.getItem", "authToken");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            updateMessage = "Giriş yapılmamış veya token yok.";
+            return;
+        }
+
+        try
+        {
+            var update = new UserModel
+                {
+                    Username = editModel.Username,
+                    FullName = editModel.FullName
+                };
+
+            var request = new HttpRequestMessage(HttpMethod.Put, "api/UserData/me")
+                {
+                    Content = JsonContent.Create(update)
+                };
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                updateMessage = $"Güncelleme hatası: {(string.IsNullOrWhiteSpace(error) ? "(sunucu açıklama döndürmedi)" : error)}";
+                return;
+            }
+
+            // Avatar işlemi
+            if (selectedAvatar != null)
+            {
+                var avatarRequest = new HttpRequestMessage(HttpMethod.Post, "api/UserData/me/avatar");
+                avatarRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                var content = new MultipartFormDataContent();
+                using var stream = selectedAvatar.OpenReadStream(5 * 1024 * 1024);
+                content.Add(new StreamContent(stream), "avatar", selectedAvatar.Name);
+                avatarRequest.Content = content;
+
+                var avatarResp = await Http.SendAsync(avatarRequest);
+                if (avatarResp.IsSuccessStatusCode)
+                {
+                    var json = await avatarResp.Content.ReadFromJsonAsync<JsonElement>();
+                    avatarUrl = json.GetProperty("avatarUrl").GetString() ?? avatarUrl;
+                }
+                else
+                {
+                    updateMessage = "Avatar yüklenemedi.";
+                }
+            }
+
+            isEditing = false;
+            await OnInitializedAsync();
+        }
+        catch (Exception ex)
+        {
+            updateMessage = "HATA: " + ex.Message;
+        }
+    }
+
+    void OnAvatarSelected(InputFileChangeEventArgs e)
+        => selectedAvatar = e.File;
+}

@@ -1,0 +1,11 @@
+<div class="feature-card">
+    <div class="icon">@Icon</div>
+    <h3>@Title</h3>
+    <p>@Desc</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Desc { get; set; } = string.Empty;
+}

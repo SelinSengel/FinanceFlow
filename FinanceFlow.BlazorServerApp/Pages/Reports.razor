@@ -1,0 +1,424 @@
+@page "/Raporlar"
+@using System.Globalization
+@using FinanceFlow.Shared.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Net.Http.Json
+@using System.Text.Json
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+
+<style>
+    .report-card {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 0.75rem;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+        .report-card h5 {
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+    .text-muted.fst-italic {
+        font-style: italic;
+        color: #6c757d;
+    }
+
+    .form-select.w-auto {
+        min-width: 220px;
+    }
+
+    .alert-info {
+        border-radius: 0.5rem;
+    }
+</style>
+
+<div class="container-lg py-4">
+    <h3 class="mb-4">📑 Raporlar</h3>
+
+    <!-- AY SEÇİM DROPDOWN -->
+    <div class="mb-4">
+        <label for="monthSelector" class="form-label">Görüntülenecek Kayıtlar:</label>
+        <select id="monthSelector" class="form-select w-auto" @onchange="OnSelectedViewChanged">
+            <option value="@CurrentMonthViewValue">📅 Güncel Ay Kayıtları</option>
+            @foreach (var m in availableArchiveMonths)
+            {
+                <option value="@m">📦 @m Arşivi</option>
+            }
+        </select>
+    </div>
+
+    <!-- KOŞULLU GÖSTERİM ALANI -->
+    @if (currentView == ReportView.Current)
+    {
+        <div class="row gx-4 gy-4">
+            <!-- GELİRLER -->
+            <div class="col-12 col-md-6">
+                <div class="report-card">
+                    <h5>💰 Güncel Gelirler</h5>
+                    @if (!currentIncomes.Any())
+                    {
+                        <p class="text-muted fst-italic">Henüz gelir kaydı yok.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Tarih</th>
+                                    <th>Kategori</th>
+                                    <th>Tutar</th>
+                                    <th>Açıklama</th>
+                                    <th>İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var inc in currentIncomes)
+                                {
+                                    <tr>
+                                        <td>@inc.CreatedAt.ToString("dd.MM.yyyy HH:mm", trTR)</td>
+                                        <td>@inc.Category</td>
+                                        <td>@inc.Amount.ToString("C0", trTR)</td>
+                                        <td>@(string.IsNullOrWhiteSpace(inc.Comment) ? "–" : inc.Comment)</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteCurrentEntryAsync(inc.Id)">Sil</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+
+            <!-- GİDERLER -->
+            <div class="col-12 col-md-6">
+                <div class="report-card">
+                    <h5>💸 Güncel Giderler</h5>
+                    @if (!currentExpenses.Any())
+                    {
+                        <p class="text-muted fst-italic">Henüz gider kaydı yok.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Tarih</th>
+                                    <th>Kategori</th>
+                                    <th>Tutar</th>
+                                    <th>Açıklama</th>
+                                    <th>İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var exp in currentExpenses)
+                                {
+                                    <tr>
+                                        <td>@exp.CreatedAt.ToString("dd.MM.yyyy HH:mm", trTR)</td>
+                                        <td>@exp.Category</td>
+                                        <td>@exp.Amount.ToString("C0", trTR)</td>
+                                        <td>@(string.IsNullOrWhiteSpace(exp.Comment) ? "–" : exp.Comment)</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteCurrentEntryAsync(exp.Id)">Sil</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    else if (currentView == ReportView.Archive && !string.IsNullOrEmpty(selectedArchiveMonthValue))
+    {
+        @if (archivedDataLoading)
+        {
+            <div class="text-center mt-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Yükleniyor...</span>
+                </div>
+                <p class="mt-2"><em>@selectedArchiveMonthValue arşivi yükleniyor...</em></p>
+            </div>
+        }
+        else
+        {
+            <div class="row gx-4 gy-4">
+                <!-- ARŞİV GELİR -->
+                <div class="col-12 col-md-6">
+                    <div class="report-card">
+                        <h5>💰 @selectedArchiveMonthValue Arşivi - Gelirler</h5>
+                        @if (archivedExpenses.Any(x => x.Type?.Equals("Income", StringComparison.OrdinalIgnoreCase) == true))
+                        {
+                            <table class="table table-bordered table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Tarih</th>
+                                        <th>Kategori</th>
+                                        <th>Tutar</th>
+                                        <th>Açıklama</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var inc in archivedExpenses.Where(x => x.Type == "Income"))
+                                    {
+                                        <tr>
+                                            <td>@inc.CreatedAt.ToString("dd.MM.yyyy HH:mm", trTR)</td>
+                                            <td>@inc.Category</td>
+                                            <td>@inc.Amount.ToString("C0", trTR)</td>
+                                            <td>@(string.IsNullOrWhiteSpace(inc.Comment) ? "–" : inc.Comment)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p class="text-muted fst-italic">Bu ay için arşivlenmiş gelir verisi yok.</p>
+                        }
+                    </div>
+                </div>
+
+                <!-- ARŞİV GİDER -->
+                <div class="col-12 col-md-6">
+                    <div class="report-card">
+                        <h5>💸 @selectedArchiveMonthValue Arşivi - Giderler</h5>
+                        @if (archivedExpenses.Any(x => x.Type?.Equals("Expense", StringComparison.OrdinalIgnoreCase) == true))
+                        {
+                            <table class="table table-bordered table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Tarih</th>
+                                        <th>Kategori</th>
+                                        <th>Tutar</th>
+                                        <th>Açıklama</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var exp in archivedExpenses.Where(x => x.Type == "Expense"))
+                                    {
+                                        <tr>
+                                            <td>@exp.CreatedAt.ToString("dd.MM.yyyy HH:mm", trTR)</td>
+                                            <td>@exp.Category</td>
+                                            <td>@exp.Amount.ToString("C0", trTR)</td>
+                                            <td>@(string.IsNullOrWhiteSpace(exp.Comment) ? "–" : exp.Comment)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p class="text-muted fst-italic">Bu ay için arşivlenmiş gider verisi yok.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (!archivedDataLoading && !archivedExpenses.Any())
+        {
+            <div class="alert alert-info mt-3" role="alert">
+                Seçilen ay (@selectedArchiveMonthValue) için arşivlenmiş kayıt bulunamadı.
+            </div>
+        }
+    }
+</div>
+
+
+@code {
+    private static readonly CultureInfo trTR = new("tr-TR");
+    private const string CurrentMonthViewValue = "CURRENT_MONTH";
+
+    private enum ReportView { Current, Archive }
+    private ReportView currentView = ReportView.Current;
+
+    private List<ExpenseModel> currentIncomes = new();
+    private List<ExpenseModel> currentExpenses = new();
+
+    private List<string> availableArchiveMonths = new();
+    private string selectedArchiveMonthValue = "";
+    private List<ArchivedExpenseModel> archivedExpenses = new();
+    private bool archivedDataLoading = false;
+    private string currentUserName = "Kullanıcı"; // İsteğe bağlı, kullanılmıyorsa kaldırılabilir
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync(); // Kullanıcı bilgilerini almak için
+        currentUserName = auth.User.Identity?.Name ?? "Kullanıcı"; // Örnek olarak kullanıcı adını alıyoruz
+
+        await LoadCurrentMonthDataAsync();
+        await LoadAvailableArchiveMonthsAsync();
+    }
+
+    private async Task LoadCurrentMonthDataAsync()
+    {
+        try
+        {
+            currentIncomes = await Http.GetFromJsonAsync<List<ExpenseModel>>("api/expenses?type=Income") ?? new();
+            currentExpenses = await Http.GetFromJsonAsync<List<ExpenseModel>>("api/expenses?type=Expense") ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Güncel ay verileri yüklenirken hata: {ex.Message}"); // Hata konsola yazdırılabilir
+            // Kullanıcıya bir hata mesajı gösterilebilir (örneğin bir Toast notification ile)
+        }
+    }
+
+    private async Task DeleteCurrentEntryAsync(int id)
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"api/expenses/{id}");
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadCurrentMonthDataAsync();
+            }
+            else
+            {
+                Console.WriteLine($"Güncel kayıt silinirken hata. Status: {response.StatusCode}");
+                // Kullanıcıya hata mesajı göster
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Güncel kayıt silme sırasında istisna: {ex.Message}");
+            // Kullanıcıya hata mesajı göster
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadAvailableArchiveMonthsAsync()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<string>>("api/archives/months");
+            if (result is not null)
+            {
+                availableArchiveMonths = result.Select(m =>
+                {
+                    var parts = m.Split('-');
+                    return parts.Length == 2 ? $"{parts[1]}-{parts[0]}" : m;
+                }).ToList();
+            }
+            else
+            {
+                availableArchiveMonths = new List<string>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Kullanılabilir arşiv ayları yüklenirken hata: {ex.Message}");
+            availableArchiveMonths = new List<string>();
+        }
+    }
+
+    private async Task OnSelectedViewChanged(ChangeEventArgs e)
+    {
+        var selectedValue = e.Value?.ToString() ?? "";
+        archivedExpenses = new List<ArchivedExpenseModel>();
+
+        if (selectedValue == CurrentMonthViewValue)
+        {
+            currentView = ReportView.Current;
+            selectedArchiveMonthValue = "";
+            // Güncel veriler zaten yüklü, tekrar yüklemeye gerek yok,
+            // ancak istenirse await LoadCurrentMonthDataAsync(); çağrılabilir.
+        }
+        else if (!string.IsNullOrEmpty(selectedValue))
+        {
+            currentView = ReportView.Archive;
+            selectedArchiveMonthValue = selectedValue;
+            await LoadArchivedDataAsync(selectedArchiveMonthValue);
+        }
+        else
+        {
+            currentView = ReportView.Current;
+            selectedArchiveMonthValue = "";
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadArchivedDataAsync(string monthYear)
+    {
+        if (string.IsNullOrEmpty(monthYear)) return;
+
+        archivedDataLoading = true;
+        StateHasChanged();
+
+        var parts = monthYear.Split('-');
+        if (parts.Length == 2 &&
+            int.TryParse(parts[0], out int month) &&
+            int.TryParse(parts[1], out int year))
+        {
+            int userId = await GetUserIdFromClaimsAsync();
+            if (userId <= 0)
+            {
+                Console.WriteLine($"Arşiv verisi yüklenemedi: Kullanıcı ID'si bulunamadı.");
+                // Kullanıcıya hata mesajı göster
+                archivedDataLoading = false;
+                StateHasChanged();
+                return;
+            }
+
+            var apiUrl = $"api/archives/{userId}?year={year}&month={month}";
+            try
+            {
+                var response = await Http.GetAsync(apiUrl);
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonContent = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(jsonContent) || jsonContent.Trim() == "[]")
+                    {
+                        archivedExpenses = new List<ArchivedExpenseModel>();
+                    }
+                    else
+                    {
+                        archivedExpenses = JsonSerializer.Deserialize<List<ArchivedExpenseModel>>(jsonContent, new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        }) ?? new List<ArchivedExpenseModel>();
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"Arşiv API çağrısı başarısız. Status: {response.StatusCode}, URL: {apiUrl}");
+                    // Kullanıcıya hata mesajı göster
+                    archivedExpenses = new List<ArchivedExpenseModel>();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Arşiv API çağrısı sırasında hata: {ex.Message}");
+                // Kullanıcıya hata mesajı göster
+                archivedExpenses = new List<ArchivedExpenseModel>();
+            }
+        }
+        else
+        {
+            Console.WriteLine($"Geçersiz arşiv ay/yıl formatı: '{monthYear}'");
+            archivedExpenses = new List<ArchivedExpenseModel>();
+        }
+        archivedDataLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task<int> GetUserIdFromClaimsAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated ?? false)
+        {
+            var idClaim = user.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier);
+            if (idClaim != null && int.TryParse(idClaim.Value, out var id))
+            {
+                return id;
+            }
+        }
+        return 0;
+    }
+}

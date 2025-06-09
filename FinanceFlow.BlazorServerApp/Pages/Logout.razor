@@ -1,0 +1,16 @@
+@page "/Çıkış"
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<h4>Çıkış yapılıyor...</h4>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // Local storage'dan auth token'ı sil
+        await JS.InvokeVoidAsync("localStorage.removeItem", "authToken");
+
+        // Giriş sayfasına yönlendir (veya varsa login sayfanın adresi)
+        Nav.NavigateTo("/giris/bireysel", forceLoad: true);
+    }
+}

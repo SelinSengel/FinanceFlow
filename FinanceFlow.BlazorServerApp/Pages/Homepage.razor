@@ -1,0 +1,341 @@
+@page "/Anasayfa"
+@using System.Globalization
+@using FinanceFlow.Shared.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
+
+<style>
+    .rounded-card {
+        border-radius: 0.75rem;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    .tooltip-box {
+        background-color: white;
+        color: #333;
+        padding: 6px 10px;
+        font-size: 0.85rem;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        position: absolute;
+        white-space: nowrap;
+        z-index: 1000;
+        pointer-events: none;
+    }
+</style>
+
+<div class="container-lg py-4">
+    <div class="row gx-4 gy-4">
+
+        <!-- Özet Kartları -->
+        @foreach (var card in new[] {
+            ("Toplam Harcama", TotalExpenses.ToString("C0", trTR), "text-danger", "bi bi-cart-dash-fill"),
+            ("Toplam Gelir", TotalIncome.ToString("C0", trTR), "text-success", "bi bi-cash-stack"),
+            ("Kalan Bütçe", Remaining.ToString("C0", trTR), Remaining >= 0 ? "text-primary" : "text-warning", "bi bi-calculator-fill"),
+            ("En Büyük Harcama", BiggestExpense != null ? $"{BiggestExpense.Amount.ToString("C0", trTR)} — {BiggestExpense.Category}" : "-", "text-info", "bi bi-award-fill")
+        })
+        {
+            <div class="col-12 col-md-6 col-lg-3">
+                <div class="bg-white border p-3 text-center rounded-card">
+                    <div class="mb-2">
+                        <i class="@card.Item4 fs-4 @card.Item3"></i>
+                    </div>
+                    <div class="text-muted small">@card.Item1</div>
+                    <div class="fw-bold fs-5 @card.Item3">@card.Item2</div>
+                </div>
+            </div>
+        }
+
+        <!-- Harcama Dağılımı -->
+        <div class="col-12 col-lg-6">
+            <div class="bg-white border rounded-card p-4 text-center">
+                <h5 class="mb-3">📊 Harcama Dağılımı</h5>
+                @if (!HasChartData)
+                {
+                    <p class="text-muted">Henüz gösterilecek bir şey yok.</p>
+                }
+                else
+                {
+                    <div style="@PieStyle" class="mx-auto position-relative"
+                         @onmousemove="OnChartMouseMove"
+                         @onmouseleave="OnChartMouseLeave">
+                        @if (showTooltip)
+                        {
+                            <div class="tooltip-box" style="top:@(tooltipY + 10)px; left:@(tooltipX + 10)px;">
+                                @tooltipText
+                            </div>
+                        }
+                    </div>
+                    <ul class="list-unstyled mt-3 text-start">
+                        @foreach (var seg in PieLegend)
+                        {
+                            <li class="d-flex align-items-center mb-2">
+                                <span style="width:12px; height:12px; background:@seg.Color; border-radius:3px; display:inline-block; margin-right:8px;"></span>
+                                <span class="me-auto">@seg.Category</span>
+                                <span class="text-muted">@seg.Percentage.ToString("0.0", trTR)%</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+
+        <!-- Hızlı Gider Ekle -->
+        <div class="col-12 col-lg-6">
+            <div class="bg-white border rounded-card p-4">
+                <h5 class="mb-3">💸 Hızlı Gider Ekle</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Kategori</label>
+                        <select class="form-select" @bind="SelectedCategory">
+                            <option value="">Seçiniz</option>
+                            <option>Market</option>
+                            <option>Ulaşım</option>
+                            <option>Fatura</option>
+                            <option>Kira</option>
+                            <option>Giyim</option>
+                            <option>Sağlık</option>
+                            <option>Eğlence</option>
+                            <option>Diğer</option>
+                        </select>
+                        @if (SelectedCategory == "Diğer")
+                        {
+                            <input class="form-control mt-2" placeholder="Kategori adı..." @bind="customCategory" />
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Tutar</label>
+                        <input type="number" class="form-control" @bind-value="newExpense.Amount" @bind-value:event="oninput" min="1" step="1" />
+                        @if (newExpense.Amount > 0)
+                        {
+                            <div class="form-text text-success mt-1">Girilen tutar: <strong>@newExpense.Amount.ToString("N0", trTR) TL</strong></div>
+                        }
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="form-label">
+                        Açıklama
+                    </label>
+                    <textarea class="form-control"
+                              @bind="newExpense.Comment"
+                              rows="3"
+                              placeholder="Detaylı bilgi giriniz"></textarea>
+                    @if (string.IsNullOrWhiteSpace(newExpense.Comment))
+                    {
+                        <div class="form-text text-primary">
+                            Toplulukta paylaşmak için açıklama girmeniz zorunludur.
+                        </div>
+                    }
+                </div>
+
+                <div class="form-check form-switch mt-3">
+                    <input class="form-check-input" type="checkbox" id="anonSwitch" @bind="newExpense.IsAnonymous" />
+                    <label class="form-check-label" for="anonSwitch">Anonim Paylaş</label>
+                </div>
+
+                <div class="mt-4 text-end">
+                    <button class="btn btn-outline-secondary me-2" @onclick="() => SubmitExpenseAsync(false)" disabled="@isSubmitting">
+                        Sadece Kaydet
+                    </button>
+                    <button class="btn btn-primary" @onclick="() => SubmitExpenseAsync(true)" disabled="@isSubmitting">
+                        Kaydet ve Paylaş
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Topluluk Harcamaları -->
+        <div class="col-12">
+            <div class="bg-white border rounded-card p-4">
+                <h5 class="mb-3">👥 Son Topluluk Paylaşımları</h5>
+                @if (!communityPosts.Any())
+                {
+                    <p class="text-muted">Henüz topluluk paylaşımı yok.</p>
+                }
+                else
+                {
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+                        @foreach (var post in communityPosts.Take(6))
+                        {
+                            <div class="col">
+                                <div class="border rounded-card p-3 h-100 bg-light">
+                                    <h6 class="fw-bold text-dark mb-1">@post.Category</h6>
+                                    <p class="mb-1">@post.Amount.ToString("C0", trTR)</p>
+                                    <p class="text-secondary small mb-2">@post.Comment</p>
+                                    <small class="text-muted d-block mt-auto">
+                                        <i class="bi bi-person me-1"></i>@GetDisplayName(post)
+                                    </small>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private static readonly CultureInfo trTR = new("tr-TR");
+    private string currentUserName = "Kullanıcı";
+    private List<ExpenseModel> expenses = new();
+    private List<ExpenseModel> chartData = new();
+    private List<ExpenseModel> communityPosts = new();
+    private ExpenseModel newExpense = new() { Type = "Expense", CreatedAt = DateTime.Now };
+    private string SelectedCategory = "";
+    private string customCategory = "";
+    private bool isSubmitting;
+
+    private record LegendSeg(string Category, string Color, double Percentage, double Sum);
+    private List<LegendSeg> PieLegend = new();
+    private List<(string Category, string Color, double Sum, double StartPct, double EndPct)> segments = new();
+    private string PieStyle = "";
+
+    private bool showTooltip;
+    private double tooltipX, tooltipY;
+    private string tooltipText = "";
+
+    private decimal TotalExpenses => expenses.Where(e => e.Type == "Expense").Sum(e => e.Amount);
+    private decimal TotalIncome => expenses.Where(e => e.Type == "Income").Sum(e => e.Amount);
+    private decimal Remaining => TotalIncome - TotalExpenses;
+    private ExpenseModel? BiggestExpense => expenses.Where(e => e.Type == "Expense").OrderByDescending(e => e.Amount).FirstOrDefault();
+    private bool HasChartData => chartData.Any();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var fullName = auth.User.Identity?.Name ?? "";
+        currentUserName = string.IsNullOrWhiteSpace(fullName)
+            ? "Kullanıcı"
+            : fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        expenses = await Http.GetFromJsonAsync<List<ExpenseModel>>("api/expenses") ?? new();
+        chartData = expenses.Where(e => e.Type == "Expense" && e.Amount > 0).ToList();
+        communityPosts = expenses.Where(e => !string.IsNullOrWhiteSpace(e.Comment) && e.Type == "Expense").ToList();
+        SetupPieData();
+    }
+
+    private void SetupPieData()
+    {
+        PieLegend.Clear();
+        segments.Clear();
+
+        var groups = chartData
+            .GroupBy(e => e.Category)
+            .Select(g => new { Cat = g.Key ?? "Bilinmeyen", Sum = (double)g.Sum(x => x.Amount) })
+            .OrderByDescending(g => g.Sum)
+            .ToList();
+
+        if (!groups.Any())
+        {
+            PieStyle = "width:200px; height:200px; border-radius:50%; background-color:#f5f5f5; margin:auto;";
+            return;
+        }
+
+        double total = groups.Sum(g => g.Sum);
+        var colors = new[] { "#0d6efd", "#20c997", "#ffc107", "#dc3545", "#6610f2", "#6f42c1", "#fd7e14", "#198754" };
+        double acc = 0;
+        var gradientParts = new List<string>();
+
+        foreach (var (g, i) in groups.Select((g, i) => (g, i)))
+        {
+            double pct = g.Sum / total * 100;
+            double start = acc;
+            double end = acc + pct;
+            string color = colors[i % colors.Length];
+
+            var s = start.ToString("F1", CultureInfo.InvariantCulture);
+            var e = end.ToString("F1", CultureInfo.InvariantCulture);
+            gradientParts.Add($"{color} {s}% {e}%");
+
+            PieLegend.Add(new LegendSeg(g.Cat!, color, Math.Round(pct, 1), g.Sum));
+            segments.Add((g.Cat!, color, g.Sum, start, end));
+            acc += pct;
+        }
+
+        var gradientDef = string.Join(", ", gradientParts);
+        PieStyle = $"width:200px; height:200px; border-radius:50%; background-image:conic-gradient({gradientDef}); margin:auto; border:1px solid #dee2e6;";
+    }
+
+    private void OnChartMouseMove(MouseEventArgs e)
+    {
+        double cx = 100, cy = 100;
+        double x = e.OffsetX - cx;
+        double y = e.OffsetY - cy;
+        double angle = Math.Atan2(y, x) * (180 / Math.PI) + 90;
+        if (angle < 0) angle += 360;
+
+        var hit = segments.FirstOrDefault(s => angle >= s.StartPct * 3.6 && angle < s.EndPct * 3.6);
+        if (hit != default)
+        {
+            tooltipText = $"{hit.Category}: {hit.Sum:N0} TL ({PieLegend.First(l => l.Category == hit.Category).Percentage.ToString("0.0", trTR)}%)";
+            showTooltip = true;
+            tooltipX = e.OffsetX;
+            tooltipY = e.OffsetY;
+        }
+        else
+        {
+            showTooltip = false;
+        }
+    }
+
+    private void OnChartMouseLeave(MouseEventArgs e)
+    {
+        showTooltip = false;
+    }
+
+    private string GetDisplayName(ExpenseModel post) =>
+        post.IsAnonymous ? "Anonim" : currentUserName;
+
+    private async Task SubmitExpenseAsync(bool sharePublicly)
+    {
+        if (isSubmitting) return;
+        isSubmitting = true;
+
+        var finalCat = SelectedCategory == "Diğer" ? customCategory : SelectedCategory;
+        if (string.IsNullOrWhiteSpace(finalCat) || newExpense.Amount <= 0)
+        {
+            await JS.InvokeVoidAsync("alert", "Lütfen geçerli bir kategori ve tutar giriniz.");
+            isSubmitting = false;
+            return;
+        }
+
+        newExpense.Category = finalCat;
+        newExpense.CreatedAt = DateTime.Now;
+        newExpense.IsShared = sharePublicly;
+
+        if (sharePublicly)
+        {
+            if (string.IsNullOrWhiteSpace(newExpense.Comment))
+            {
+                await JS.InvokeVoidAsync("alert", "Toplulukta paylaşmak için açıklama girmeniz zorunludur.");
+                isSubmitting = false;
+                return;
+            }
+        }
+        else
+        {
+            newExpense.Comment = "";
+            newExpense.IsAnonymous = false;
+        }
+
+        await Http.PostAsJsonAsync("api/expenses/expense", newExpense);
+        newExpense = new ExpenseModel { Type = "Expense", CreatedAt = DateTime.Now };
+        SelectedCategory = "";
+        customCategory = "";
+        await LoadDataAsync();
+        isSubmitting = false;
+    }
+}
+

@@ -1,0 +1,114 @@
+@page "/kayit/bireysel"
+@using FinanceFlow.BlazorServerApp.Services
+@using System.ComponentModel.DataAnnotations
+@using FinanceFlow.BlazorServerApp.Components.Layout
+@using FinanceFlow.Shared.Models
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@inject AuthApiService AuthService
+@inject NavigationManager Nav
+
+<div class="register-page">
+    <div class="register-card">
+        <h2>Hesap Oluştur</h2>
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success">@successMessage</div>
+        }
+        else if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">@errorMessage</div>
+        }
+
+        <EditForm Model="registerModel"
+                  OnValidSubmit="HandleValidSubmit"
+                  OnInvalidSubmit="HandleInvalidSubmit">
+            <DataAnnotationsValidator />
+
+            <!-- ★ Ad Soyad Alanı -->
+            <div class="form-group mb-3">
+                <label>Ad Soyad</label>
+                <InputText class="form-control"
+                           @bind-Value="registerModel.FullName"
+                           placeholder="Adınızı ve soyadınızı girin" />
+                <ValidationMessage For="@(() => registerModel.FullName)" />
+            </div>
+
+            <div class="form-group mb-3">
+                <label>E-posta</label>
+                <InputText class="form-control"
+                           @bind-Value="registerModel.Email"
+                           placeholder="E-posta adresinizi girin" />
+                <ValidationMessage For="@(() => registerModel.Email)" />
+            </div>
+
+            <div class="form-group mb-3">
+                <label>Kullanıcı Adı</label>
+                <InputText class="form-control"
+                           @bind-Value="registerModel.Username"
+                           placeholder="Kullanıcı adınızı girin" />
+                <ValidationMessage For="@(() => registerModel.Username)" />
+            </div>
+
+            <div class="form-group mb-4">
+                <label>Şifre</label>
+                <div class="input-group">
+                    <InputText class="form-control"
+                               @bind-Value="registerModel.Password"
+                               type="@_passwordInputType"
+                               placeholder="Şifrenizi girin" />
+                    <button class="btn btn-outline-secondary"
+                            type="button"
+                            @onclick="TogglePasswordVisibility"
+                            aria-label="Toggle password visibility">
+                        <i class="@_passwordIcon"></i>
+                    </button>
+                </div>
+                <ValidationMessage For="@(() => registerModel.Password)" />
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+                Kayıt Ol
+            </button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private RegisterModel registerModel = new();
+    private string successMessage;
+    private string errorMessage;
+
+    private bool _showPassword;
+    private string _passwordInputType => _showPassword ? "text" : "password";
+    private string _passwordIcon => _showPassword ? "fas fa-eye-slash" : "fas fa-eye";
+
+    private void TogglePasswordVisibility()
+        => _showPassword = !_showPassword;
+
+    private Task HandleInvalidSubmit(EditContext ctx)
+    {
+        successMessage = null;
+        errorMessage = "Lütfen tüm alanları eksiksiz ve geçerli doldurun.";
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        successMessage = errorMessage = null;
+
+        var result = await AuthService.RegisterIndividualAsync(registerModel);
+        if (result.Succeeded)
+        {
+            successMessage = "Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz…";
+            StateHasChanged();
+            await Task.Delay(1500);
+            Nav.NavigateTo("/giris/bireysel", true);
+        }
+        else
+        {
+            errorMessage = result.Message;
+        }
+    }
+}

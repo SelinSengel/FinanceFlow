@@ -1,0 +1,316 @@
+@page "/AIRapor"
+@using Microsoft.AspNetCore.Components.Web
+@using System.Text.Json 
+@using System.Text 
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<div class="container my-4">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold fs-4 text-primary">💡 Advisora Kişisel Harcama Raporu</h2>
+        <p class="text-muted">Yapay zeka destekli analizleriniz ve bütçe sohbetiniz.</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="d-flex justify-content-center align-items-center" style="min-height: 200px;">
+            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                <span class="visually-hidden">Yükleniyor...</span>
+            </div>
+            <p class="ms-3 fs-5">Analizleriniz hazırlanıyor, lütfen bekleyin...</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <div class="col-lg-4 col-md-6">
+                <div class="card shadow-sm rounded-4 h-100">
+                    <div class="card-body text-center">
+                        <div class="fs-1 mb-2">📈</div>
+                        <h5 class="card-title">Gelir Analizi</h5>
+                        <p class="card-text text-muted text-start">@((MarkupString)incomeInsight)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 col-md-6">
+                <div class="card shadow-sm rounded-4 h-100">
+                    <div class="card-body text-center">
+                        <div class="fs-1 mb-2">📉</div>
+                        <h5 class="card-title">Gider Analizi</h5>
+                        <p class="card-text text-muted text-start">@((MarkupString)expenseInsight)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 col-md-6">
+                <div class="card shadow-sm rounded-4 h-100">
+                    <div class="card-body text-center">
+                        <div class="fs-1 mb-2">⚖️</div>
+                        <h5 class="card-title">Gelir-Gider Dengesi</h5>
+                        <p class="card-text text-muted text-start">@((MarkupString)balanceInsight)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-5">
+            <button class="btn btn-lg btn-outline-primary px-4" @onclick="FetchInsights" disabled="@isLoading">
+                <i class="bi bi-arrow-clockwise me-2"></i>
+                @(isLoading ? "Yenileniyor..." : "Yorumları Yenile")
+            </button>
+        </div>
+    }
+</div>
+
+<!-- 💬 Sohbet Balonu Sağ Alt -->
+<div class="chat-widget @(isOpen ? "open" : "")">
+    <div class="chat-header" @onclick="ToggleChat">
+        <span>💬 Advisora ile Sohbet</span>
+        <span class="chat-toggle-icon">@(isOpen ? "−" : "+")</span>
+    </div>
+
+    @if (isOpen)
+    {
+        <div class="chat-body" @ref="chatBodyRef">
+            @if (!messages.Any())
+            {
+                <div class="chat-message system">
+                    Merhaba! Bütçenizle ilgili merak ettiklerinizi sorabilirsiniz.
+                </div>
+            }
+            @foreach (var message in messages)
+            {
+                <div class="chat-message-wrapper @(message.Role)">
+                    <div class="chat-message-bubble">
+                        @if (message.Role == "ai") {
+                            <strong>Advisora:</strong><br />
+                        }
+                        @((MarkupString)message.Content)
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="chat-footer">
+            <textarea class="chat-input"
+                      @bind="chatInput"
+                      @bind:event="oninput"
+                      placeholder="Sorunuzu yazın..."
+                      @onkeydown="HandleKeyDown"
+                      @onkeydown:preventDefault="shouldPreventDefaultOnEnter"
+                      rows="2"></textarea>
+            <button class="btn btn-primary btn-send"
+                    @onclick="SendChat"
+                    disabled="@chatLoading"
+                    title="Gönder">
+                @if (chatLoading)
+                {
+                    <span class="spinner-border spinner-border-sm"></span>
+                }
+                else
+                {
+                    <i class="bi bi-send-fill"></i>
+                }
+            </button>
+        </div>
+    }
+</div>
+
+<style>
+    .card { transition: all 0.2s ease-in-out; }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15) !important; }
+
+    .chat-widget {
+        position: fixed; bottom: 20px; right: 20px; width: 340px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        z-index: 1050; box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        border-radius: 10px; overflow: hidden; background-color: #fff;
+        transition: all 0.3s ease-in-out;
+    }
+    .chat-header {
+        background-image: linear-gradient(to right, #007bff, #0056b3); color: white;
+        padding: 12px 15px; cursor: pointer; display: flex;
+        justify-content: space-between; align-items: center; font-weight: 600;
+    }
+    .chat-toggle-icon { font-size: 1.2em; }
+    .chat-body {
+        height: 0; opacity: 0; overflow-y: auto; padding: 0px;
+        background-color: #f8f9fa;
+        transition: height 0.3s ease-in-out, opacity 0.3s ease-in-out 0.1s, padding 0.3s ease-in-out;
+        border-top: 1px solid #e0e0e0; border-bottom: 1px solid #e0e0e0;
+    }
+    .chat-widget.open .chat-body { height: 350px; opacity: 1; padding: 15px; }
+
+    .chat-message-wrapper { display: flex; margin-bottom: 12px; }
+    .chat-message-wrapper.user { justify-content: flex-end; }
+    .chat-message-wrapper.ai { justify-content: flex-start; }
+    .chat-message-bubble {
+        padding: 8px 12px; border-radius: 18px; max-width: 80%;
+        line-height: 1.4; font-size: 0.9rem; white-space: pre-wrap; word-wrap: break-word;
+    }
+    .chat-message-wrapper.user .chat-message-bubble {
+        background-color: #007bff; color: white; border-bottom-right-radius: 5px;
+    }
+    .chat-message-wrapper.ai .chat-message-bubble {
+        background-color: #e9ecef; color: #333; border-bottom-left-radius: 5px;
+    }
+    .chat-message.system {
+        text-align: center; font-style: italic; color: #6c757d;
+        font-size: 0.85rem; margin-bottom: 15px;
+    }
+    .chat-footer {
+        display: flex; align-items: center; padding: 10px; background-color: #fff;
+    }
+    .chat-input {
+        flex-grow: 1; border: 1px solid #ced4da; border-radius: 20px;
+        padding: 8px 15px; font-size: 0.9rem; resize: none; margin-right: 8px;
+        max-height: 80px; overflow-y: auto;
+    }
+    .chat-input:focus {
+        outline: none; border-color: #80bdff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+    }
+    .btn-send {
+        border-radius: 50%; width: 40px; height: 40px;
+        display: flex; align-items: center; justify-content: center;
+        padding: 0;
+    }
+</style>
+
+        @code {
+    string incomeInsight = "Gelir analiziniz hazırlanıyor...";
+    string expenseInsight = "Gider analiziniz hazırlanıyor...";
+    string balanceInsight = "Gelir-gider denge analiziniz hazırlanıyor...";
+    bool isLoading = true;
+
+    string chatInput = "";
+    bool chatLoading = false;
+    bool isOpen = false;
+
+    List<ChatEntry> messages = new();
+    record ChatEntry(string Role, string Content);
+
+    ElementReference chatBodyRef;
+    private bool shouldPreventDefaultOnEnter = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await FetchInsights();
+    }
+
+    private async Task FetchInsights()
+    {
+        isLoading = true;
+        StateHasChanged();
+        HttpContent? content = null;
+
+        try
+        {
+            var incomeResTask = Http.PostAsync("api/ai/income", content);
+            var expenseResTask = Http.PostAsync("api/ai/expense", content);
+            var balanceResTask = Http.PostAsync("api/ai/balance", content);
+
+            await Task.WhenAll(incomeResTask, expenseResTask, balanceResTask);
+
+            var incomeRes = await incomeResTask;
+            incomeInsight = incomeRes.IsSuccessStatusCode
+                ? await incomeRes.Content.ReadAsStringAsync()
+                : $"Gelir analizi alınamadı (Hata: {incomeRes.StatusCode}).";
+
+            var expenseRes = await expenseResTask;
+            expenseInsight = expenseRes.IsSuccessStatusCode
+                ? await expenseRes.Content.ReadAsStringAsync()
+                : $"Gider analizi alınamadı (Hata: {expenseRes.StatusCode}).";
+
+            var balanceRes = await balanceResTask;
+            balanceInsight = balanceRes.IsSuccessStatusCode
+                ? await balanceRes.Content.ReadAsStringAsync()
+                : $"Denge analizi alınamadı (Hata: {balanceRes.StatusCode}).";
+        }
+        catch (Exception ex)
+        {
+            incomeInsight = "Gelir analizi alınırken bir hata oluştu.";
+            expenseInsight = "Gider analizi alınırken bir hata oluştu.";
+            balanceInsight = "Denge analizi alınırken bir hata oluştu.";
+            Console.WriteLine($"FetchInsights Exception: {ex.Message}");
+        }
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task SendChat()
+    {
+        var userMessageText = chatInput?.Trim();
+        if (string.IsNullOrWhiteSpace(userMessageText)) return;
+
+        messages.Add(new ChatEntry("user", userMessageText));
+        chatInput = "";
+        chatLoading = true;
+        StateHasChanged();
+
+        string aiResponse;
+        try
+        {
+            var jsonEscapedMessage = JsonSerializer.Serialize(userMessageText);
+            StringContent chatContent = new StringContent(jsonEscapedMessage, Encoding.UTF8, "application/json");
+            var response = await Http.PostAsync("api/ai/chat", chatContent);
+
+            aiResponse = response.IsSuccessStatusCode
+                ? await response.Content.ReadAsStringAsync()
+                : $"[Hata {response.StatusCode}]: Yanıt alınamadı.";
+        }
+        catch (Exception ex)
+        {
+            aiResponse = "[Hata]: Mesaj gönderilirken bir sorun oluştu.";
+            Console.WriteLine($"SendChat Exception: {ex.Message}");
+        }
+
+        messages.Add(new ChatEntry("ai", aiResponse));
+        chatLoading = false;
+        StateHasChanged();
+        await ScrollToBottom();
+    }
+
+    private void ToggleChat()
+    {
+        isOpen = !isOpen;
+        if (isOpen && messages.Any())
+        {
+            InvokeAsync(async () =>
+            {
+                await Task.Delay(50);
+                await ScrollToBottom();
+            });
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            shouldPreventDefaultOnEnter = true;
+            await SendChat();
+        }
+        else
+        {
+            shouldPreventDefaultOnEnter = false;
+        }
+    }
+
+    private async Task ScrollToBottom()
+    {
+        if (isOpen)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("eval", @"
+                    let chatBody = document.querySelector('.chat-widget.open .chat-body');
+                    if(chatBody) chatBody.scrollTop = chatBody.scrollHeight;
+                ");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ScrollToBottom JS error: {ex.Message}");
+            }
+        }
+    }
+}

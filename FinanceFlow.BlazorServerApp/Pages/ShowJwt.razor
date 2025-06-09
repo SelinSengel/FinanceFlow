@@ -1,0 +1,53 @@
+﻿@page "/ShowJwt"
+@using System.Text
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedLocalStorage Storage
+
+<h3>JWT Payload</h3>
+
+@if (payloadJson is null)
+{
+    <p><em>Yükleniyor…</em></p>
+}
+else
+{
+    <pre>@payloadJson</pre>
+}
+
+@code {
+    private string? payloadJson;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 1) LocalStorage'dan token'ı oku
+        var result = await Storage.GetAsync<string>("authToken");
+        var token = result.Success ? result.Value : null;
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            payloadJson = "authToken bulunamadı.";
+            return;
+        }
+
+        try
+        {
+            // 2) Token'ı parçalara ayır, payload kısmını Base64'ten aç
+            var parts = token.Split('.');
+            if (parts.Length < 2) throw new FormatException("Geçersiz JWT");
+            var encodedPayload = parts[1];
+            // Padding ekle
+            encodedPayload = encodedPayload
+                .PadRight(encodedPayload.Length + (4 - encodedPayload.Length % 4) % 4, '=');
+            var bytes = Convert.FromBase64String(encodedPayload);
+            var json = Encoding.UTF8.GetString(bytes);
+
+            // 3) Güzel gösterim için indent
+            using var doc = JsonDocument.Parse(json);
+            payloadJson = JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception ex)
+        {
+            payloadJson = $"Hata: {ex.Message}";
+        }
+    }
+}

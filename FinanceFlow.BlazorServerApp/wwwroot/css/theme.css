@@ -1,0 +1,48 @@
+/* ——————————————————————————————————————————————
+   Anasayfa İçin Yeni Mavi Palet
+   —————————————————————————————————————————————— */
+:root {
+    --brand-primary: #1C3FAA; /* koyu lacivert */
+    --brand-secondary: #4C6EF5; /* soft mavi */
+    --brand-light: #E3EBFF; /* çok açık mavi */
+    --brand-muted: #F0F4FF; /* neredeyse beyaz mavi */
+    --accent-success: #28A745;
+    --accent-info: #17A2B8;
+    --accent-warning: #FFC107;
+    --accent-danger: #DC3545;
+}
+
+/* Kartların hafif açık mavi zeminini güncelledik */
+.section-card {
+    background: var(--brand-muted);
+}
+
+    /* Başlık renkleri artık koyu lacivert */
+    .section-card h3,
+    .section-card h5 {
+        color: var(--brand-primary) !important;
+    }
+
+/* Günün özeti kutuları: beyaz bg + çerçeve secondary mavi */
+.info-box {
+    background: white !important;
+    border: 2px solid var(--brand-secondary);
+    color: var(--brand-primary) !important;
+}
+
+/* Post kartları da beyaz + secondary çerçeve */
+.post-card {
+    background: white;
+    border: 1px solid var(--brand-secondary);
+    color: var(--brand-primary);
+}
+
+/* Yıldız dolgusu secondary mavi */
+.star-filled {
+    color: var(--brand-secondary) !important;
+}
+
+/* Eğer section’ların genel zeminini çok hafif mavi istersen */
+.section-grid {
+    background: var(--brand-light);
+}

@@ -1,0 +1,195 @@
+@page "/Topluluk"
+@using System.Globalization
+@using FinanceFlow.Shared.Models
+@inject HttpClient Http
+@using System.Net.Http.Json
+@using System.Text.RegularExpressions
+
+<div class="container-lg py-4">
+    <div class="text-center mb-3">
+        <h2 class="fw-bold">👥 Topluluk Paylaşımları</h2>
+        <p class="text-muted">Kullanıcıların deneyimlerine göz atın.</p>
+    </div>
+
+    <!-- Arama Kutusu -->
+    <div class="row justify-content-center mb-4">
+        <div class="col-md-10 col-lg-8">
+            <div class="input-group shadow-sm">
+                <input type="text"
+                       class="form-control form-control-lg"
+                       placeholder="Kategori, açıklama veya kullanıcı adı ile ara..."
+                       @bind="searchTerm"
+                       @bind:event="oninput" />
+                @if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    <button class="btn btn-outline-secondary" @onclick="ClearSearch" title="Aramayı Temizle">
+                        <i class="bi bi-x"></i>
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="d-flex justify-content-center align-items-center" style="min-height: 200px;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Yükleniyor...</span>
+            </div>
+            <p class="ms-2">Paylaşımlar yükleniyor...</p>
+        </div>
+    }
+    else if (!filteredPosts.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-journal-x display-4 text-muted mb-3"></i>
+            <h5 class="text-muted">Eşleşen Paylaşım Bulunamadı</h5>
+            <p class="text-muted small">Arama teriminizi değiştirmeyi deneyin.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+            @foreach (var post in filteredPosts.OrderByDescending(p => p.CreatedAt))
+            {
+                <div class="col d-flex">
+                    <div class="community-card w-100">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h6 class="fw-bold text-primary mb-0 post-username">
+                                    <i class="bi bi-person-fill me-1"></i> @post.UserName
+                                </h6>
+                                <small class="text-muted post-date">@post.CreatedAt.ToString("dd MMM yyyy, HH:mm", trTR)</small>
+                            </div>
+                            <span class="badge rounded-pill @(post.Type?.Equals("income", StringComparison.OrdinalIgnoreCase) == true ? "text-bg-success" : "text-bg-danger") post-type-badge">
+                                @(post.Type?.Equals("income", StringComparison.OrdinalIgnoreCase) == true ? "Gelir" : "Gider")
+                            </span>
+                        </div>
+
+                        <div class="post-content mb-2">
+                            <p class="fw-semibold mb-1 post-category-amount">
+                                <strong class="text-dark">@((MarkupString)Highlight(post.Category ?? "Diğer"))</strong>
+                                <span class="text-muted mx-1">—</span>
+                                <span class="@(post.Type?.Equals("income", StringComparison.OrdinalIgnoreCase) == true ? "text-success" : "text-danger") fw-bold">
+                                    @post.Amount.ToString("C0", trTR)
+                                </span>
+                            </p>
+
+                            @if (!string.IsNullOrWhiteSpace(post.Comment))
+                            {
+                                <p class="text-secondary small post-comment">@((MarkupString)Highlight(post.Comment))</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .community-card {
+        display: flex;
+        flex-direction: column;
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 0.75rem;
+        padding: 1rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+    }
+
+        .community-card:hover {
+            box-shadow: 0 .5rem 1rem rgba(0,0,0,.1);
+            transform: translateY(-3px);
+        }
+
+    .post-username {
+        font-size: 0.95rem;
+    }
+
+    .post-date {
+        font-size: 0.75rem;
+    }
+
+    .post-type-badge {
+        font-size: 0.75rem;
+        padding: 0.35em 0.7em;
+    }
+
+    .post-category-amount {
+        font-size: 1rem;
+    }
+
+    .post-comment {
+        font-size: 0.875rem;
+        line-height: 1.5;
+        word-break: break-word;
+    }
+
+    .input-group .btn i {
+        vertical-align: middle;
+    }
+
+    mark {
+        background-color: #fff3cd;
+        padding: 0.1em 0.2em;
+        border-radius: 0.25rem;
+    }
+</style>
+
+@code {
+    private static readonly CultureInfo trTR = new("tr-TR");
+    private List<ExpenseModel> allPosts = new();
+    private string searchTerm = "";
+    private bool isLoading = true;
+
+    private IEnumerable<ExpenseModel> filteredPosts =>
+        string.IsNullOrWhiteSpace(searchTerm)
+            ? allPosts
+            : allPosts.Where(p =>
+                (p.UserName?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (p.Category?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (p.Comment?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        try
+        {
+            var expenses = await Http.GetFromJsonAsync<List<ExpenseModel>>("api/expenses/shared");
+            allPosts = expenses?.OrderByDescending(p => p.CreatedAt).ToList() ?? new List<ExpenseModel>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Veri yüklenirken hata: {ex.Message}");
+            allPosts = new List<ExpenseModel>();
+        }
+        isLoading = false;
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = "";
+    }
+
+    private string Highlight(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm) || string.IsNullOrWhiteSpace(input))
+            return System.Net.WebUtility.HtmlEncode(input ?? "");
+
+        var encodedInput = System.Net.WebUtility.HtmlEncode(input);
+        var encodedSearchTerm = System.Net.WebUtility.HtmlEncode(searchTerm);
+
+        try
+        {
+            return Regex.Replace(encodedInput, $"({Regex.Escape(encodedSearchTerm)})",
+                                 "<mark>$1</mark>",
+                                 RegexOptions.IgnoreCase);
+        }
+        catch
+        {
+            return encodedInput;
+        }
+    }
+}

@@ -1,0 +1,19 @@
+﻿@namespace FinanceFlow.BlazorServerApp.Shared
+<div class="col-sm-6 col-lg-3">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center">
+            <i class="bi @Icon fs-1 text-@Color mb-2"></i>
+            <h6 class="card-subtitle mb-1 text-muted">@Title</h6>
+            <h3 class="fw-bold">@Value</h3>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "bi-info-circle";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public string Color { get; set; } = "primary";
+    [Parameter] public string Background { get; set; } = "bg-primary";
+
+}

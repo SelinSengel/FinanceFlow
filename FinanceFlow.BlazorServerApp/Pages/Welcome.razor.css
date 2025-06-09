@@ -1,0 +1,100 @@
+/* 1) Tüm sayfanın arkaplanı */
+html, body {
+    background-color: #f0f4ff;
+    margin: 0;
+    padding: 0;
+}
+
+/* 2) Card panel */
+.welcome-container {
+    background-color: #ffffff; /* Beyaz panel */
+    border-radius: 16px;
+    padding: 3rem 2rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    max-width: 1200px;
+    width: 95%;
+    margin: 3rem auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3rem;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+/* 3) Hero bölümü kartı gibi gölgelendirme ve beyaz arkaplan */
+.hero {
+    background-color: #ffffff; /* Beyaz */
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    width: 100%;
+    max-width: 800px;
+    box-sizing: border-box;
+}
+
+    /* Başlık ve metin renkleri */
+    .hero h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.75rem;
+        color: #1f2d5a;
+    }
+
+    .hero p {
+        font-size: 1.125rem;
+        color: #4f5d75;
+        margin-bottom: 1.5rem;
+    }
+
+/* 4) Butonlar oval, gölge ve hover */
+.button-group .btn {
+    padding: 0.6rem 1.8rem;
+    font-size: 1rem;
+    border-radius: 999px;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease;
+}
+
+/* Bireysel buton */
+.button-group .btn-primary {
+    background-color: #4c6ef5;
+    color: #ffffff;
+}
+
+/* Kurumsal buton: koyu lacivert arka plan + beyaz yazı */
+.button-group .btn-secondary {
+    background-color: #1c3faa;
+    color: #ffffff;
+}
+
+/* Genel hover efekti */
+.button-group .btn:hover {
+    transform: translateY(-2px);
+    opacity: 0.95;
+}
+
+/* Kurumsal buton hover’da daha koyu lacivert */
+.button-group .btn-secondary:hover {
+    background-color: #162f7a;
+}
+
+/* 5) Feature kartları */
+.features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+    width: 100%;
+}
+
+    .features > * {
+        flex: 1 1 calc(33% - 1rem);
+        max-width: calc(33% - 1rem);
+    }
+
+/* 6) Güvenlik uyarısı */
+.security {
+    font-size: 0.9rem;
+    color: #666;
+}

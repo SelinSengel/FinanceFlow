@@ -1,0 +1,69 @@
+@page "/welcome"
+@using FinanceFlow.BlazorServerApp.Components.Layout
+@using FinanceFlow.BlazorServerApp.Components
+@layout EmptyLayout
+
+<div class="welcome-container">
+    <section class="hero">
+        <h1>Finansal Özgürlüğe İlk Adımını At!</h1>
+        <p>Harcamalarını takip et, başkalarından ilham al ve geleceğini planla.</p>
+        <div class="button-group">
+            <button class="btn btn-primary" @onclick="NavigateToIndividual">Harcamalarını Takip Etmeye Başla!</button>
+            @* <button class="btn btn-secondary" @onclick="NavigateToCorporate">Kurumsal Kullanıcı</button> *@
+        </div>
+    </section>
+    <script>
+        function setTheme(theme) {
+          localStorage.setItem('theme', theme);
+          document.body.className = `theme-${theme}`;
+        }
+
+        // Sayfa yüklenince önceki tema uygulansın
+        window.onload = () => {
+          const savedTheme = localStorage.getItem('theme');
+          if (savedTheme) {
+            document.body.className = `theme-${savedTheme}`;
+          }
+        };
+    </script>
+
+    
+    <section class="features">
+        <FeatureCard
+            Icon="📊"
+            Title="Takip Et"
+            Desc="Aylık harcamalarını kategorilere göre analiz et. Hangi alanda ne kadar harcadığını fark ederek daha kontrollü yaşa." />
+
+        <FeatureCard
+            Icon="👥"
+            Title="İlham Al"
+            Desc="Başkalarının harcama tercihlerini ve memnuniyetlerini gör. Aynı hizmeti daha uygun fiyata al, tasarruf et, deneyimden faydalan!" />
+
+        <FeatureCard
+            Icon="🚀"
+            Title="Geleceği Planla"
+            Desc="Yatırım hedeflerin için hazır ol. Bütçeni önceden ayarla, geleceğine güvenle yön ver." />
+    </section>
+
+
+    <div class="security">
+        🔒 Verilerin güvende. KVKK ve gizlilik ilkelerine %100 uyumluyuz.
+    </div>
+</div>
+
+
+@code {
+    private void NavigateToIndividual()
+    {
+        NavigationManager.NavigateTo("/giris/bireysel");
+    }
+
+    // private void NavigateToCorporate()
+    // {
+    // NavigationManager.NavigateTo("/giris/kurumsal");
+    // }
+
+    [Inject]
+    private NavigationManager NavigationManager { get; set; }
+}
+
